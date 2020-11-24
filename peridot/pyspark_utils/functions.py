@@ -130,8 +130,7 @@ def mapWithDict(col, dico):
     """
 
     spark_output_type = pyspark.sql.types._type_mappings[set(map(type, dico.values())).pop()].typeName()
-    return (lambda func, col: func(col))(F.udf(lambda val: dico[val] if val in tuple(dico.keys())
-                                               else None, spark_output_type), col)
+    return F.mapPandas(col, pd.Series.map, arg=dico, returntype=spark_output_type)
 
 F.mapWithDict = mapWithDict
 
