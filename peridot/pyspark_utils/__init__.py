@@ -1,1 +1,1 @@
-__all__ = ["datasource", "functions", "utils"]
+__all__ = ["dataframe", "datasource", "functions", "math", "utils"]
