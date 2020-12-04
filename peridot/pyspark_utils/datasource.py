@@ -39,8 +39,8 @@ def load_dataset(datasource, cols, tz, timestamp_var="recordDate",
  
     ## Impacts on serialization, depending of the underlying data format
     all_cols = spark.sql(f"SELECT * FROM {datasource}").columns
-    table_describe = spark.sql(f"describe extended {datasource}").toPandas()
-    underlying_format = table_describe.loc[table_describe["col_name"] == "Serde Library", "data_type"].values[0]
+    table_describe = spark.sql(f"describe extended {datasource}")
+    underlying_format = table_describe.filter(F.col("col_name") == "Serde Library").select("data_type").collect()[0][0]
     if underlying_format == 'org.openx.data.jsonserde.JsonSerDe': #format json: les varaibles sont encadrées de back ticks
         cols = [[f"`{col}`" for col in all_cols if (col_selected == col) or (f".{col_selected}" in col)][0] for col_selected in cols]
     elif underlying_format == 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe': #format csv

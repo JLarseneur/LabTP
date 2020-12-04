@@ -1,7 +1,7 @@
 import pyspark
 import pyspark.sql.functions as F
 from pyspark.sql.window import Window
-from pyspark.sql import DataFrame
+# from pyspark.sql import DataFrame
 from pyspark.sql.types import *
 from delta.tables import DeltaTable
 
@@ -17,6 +17,7 @@ try:
     pd.options.plotting.backend = "plotly"
 except:
     print("plotly is not installed on this cluster")
+
 
 ## Get SparkSession to be able to use functions such as spark.sql or spark.sql without needing to set it as a parameter
 from pyspark.sql import SparkSession

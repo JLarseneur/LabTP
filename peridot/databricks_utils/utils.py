@@ -94,13 +94,13 @@ def save_dataframe(self, path="", convert_to="csv", dbfs_path="", **kwargs):
     props = {"dbfs_path": dbfs_path or dbfs}
     props.update(kwargs)
     
-    if type(self) == pd.core.frame.DataFrame:
+    if isinstance(self, pd.core.frame.DataFrame):
         if convert_to in flat_files:
             pd.core.frame.DataFrame.convert_to = eval(f"pd.core.frame.DataFrame.to_{convert_to}")
             self.convert_to(f"/dbfs{props['dbfs_path']}{path}")
         else:
             pass #convertir en spark dataframe et transformer le elif suivant en if
-    elif type(self) == pyspark.sql.dataframe.DataFrame:
+    elif isinstance(self, pyspark.sql.dataframe.DataFrame):
         convert_to = "com.microsoft.azure.cosmosdb.spark" if convert_to == "cosmosdb" else convert_to
         coalesce = ".coalesce(1)" if convert_to in flat_files+["cosmosdb"] else ""
         repartition = f".partitionBy(\"{props['repartition']}\")" if "repartition" in props.keys() else ""
