@@ -41,13 +41,13 @@ def load_dataset(datasource, cols, tz, timestamp_var="recordDate",
     all_cols = spark.sql(f"SELECT * FROM {datasource}").columns
     table_describe = spark.sql(f"describe extended {datasource}")
     underlying_format = table_describe.filter(F.col("col_name") == "Serde Library").select("data_type").collect()[0][0]
-    if underlying_format == 'org.openx.data.jsonserde.JsonSerDe': #format json: les varaibles sont encadrées de back ticks
+    if underlying_format == 'org.openx.data.jsonserde.JsonSerDe': #json format: variables are backticked
         cols = [[f"`{col}`" for col in all_cols if (col_selected == col) or (f".{col_selected}" in col)][0] for col_selected in cols]
-    elif underlying_format == 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe': #format csv
+    elif underlying_format == 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe': #csv format
         pass
-    elif underlying_format == 'org.apache.hadoop.hive.ql.io.orc.OrcSerde': #format orc
+    elif underlying_format == 'org.apache.hadoop.hive.ql.io.orc.OrcSerde': #orc format
         pass
-    elif underlying_format == 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe': #format parquet
+    elif underlying_format == 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe': #parquet format
         pass
     
     ## Loading of the dataset 

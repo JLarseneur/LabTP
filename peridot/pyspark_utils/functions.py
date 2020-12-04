@@ -34,7 +34,6 @@ def arrayFunc(col, func, returntype=DoubleType(), **params):
     
     len0_var = [] if type(returntype) == pyspark.sql.types.ArrayType else np.nan
     
-    @F.pandas_udf(returntype)
     def array_func(s: pd.Series) -> pd.Series:
         return s.apply(lambda arr: func(arr, **params) if len(arr) != 0 else len0_var)
     return array_func(col)
@@ -74,8 +73,8 @@ def cumsum(col, orderby, partitionby=None):
     """
 
     col = F.col(col) if type(col) == str else col
-    win = (Window.partitionBy(partitionby).orderBy(orderby)
-        .rangeBetween(Window.unboundedPreceding, Window.currentRow))
+    win = (Window.partitionBy(partitionby).orderBy(orderby) 
+                 .rangeBetween(Window.unboundedPreceding, Window.currentRow))
     return F.sum(col).over(win)
 
 F.cumsum = cumsum
@@ -117,8 +116,8 @@ def incrementalCut(col, expr, orderby, partitionby=None):
     col = F.col(col) if type(col) == str else col
     win = Window.partitionBy(partitionby).orderBy(orderby) if partitionby else Window.orderBy(orderby)
     return (F.last(F.when(eval("(col - F.lag(col).over(win))" + expr) |
-                        (F.row_number().over(win) == F.lit(1)),
-                        F.monotonically_increasing_id() + F.lit(1))
+                          (F.row_number().over(win) == F.lit(1)),
+                          F.monotonically_increasing_id() + F.lit(1))
                     .otherwise(F.lit(None)), ignorenulls=True)
             .over(win.rowsBetween(Window.unboundedPreceding, Window.currentRow)))
 
@@ -155,7 +154,7 @@ F.mapPandas = mapPandas
 ## A généraliser avec F.arrayFunc ?
 
 
-def mapWithDict(col, dico, returntype=DoubleType()):
+def mapWithDict(col, dico, returntype):
     """
     Map values of a dataframe column from a dictionary
 
@@ -167,7 +166,8 @@ def mapWithDict(col, dico, returntype=DoubleType()):
         Spark column
     """
 
-    #Eventuellemnt, calculer le mode des types et retourner un message informatif si le returntype est différent
+    #Eventuellemnt mettre returntype à None,
+    # et calculer le mode des types (retourner un message informatif si le returntype est différent)
     # spark_output_type = pyspark.sql.types._type_mappings[set(map(type, dico.values())).pop()].typeName()
     return F.mapPandas(col, pd.Series.map, arg=dico, returntype=returntype)
 
@@ -223,16 +223,20 @@ class DataFrame(OriginalSparkDataFrame):
                                             (2, 1, np.nan,  12, 5.49, 4), (3, 1, np.nan, 12, 6.28, 5), (5, 1, 30., 13, 0., 6),
                                             (1, 1, 30., 13, 0.78, 7), (1, 2, 75., 13, 1.57, 8), (10, 2, np.nan, 13, 5.49, 9),
                                             (100, 2, 98., 13, 6.28, 10)], ("order", "id", "age", "group", "angle", "num"))
-            >>> (df.applyPandasFunc("interpolate", "age", new_col="age_new", orderby="order", partitionby="id", method="ffill")
-                .applyPandasFunc("interpolate", "age", new_col="age_new_2", orderby="order", partitionby="id", method="bfill")  
-                .applyPandasFunc("cumsum", ["age", "id"], new_col=["age_new_3", "id_new_3"], orderby="order", ascending=False,
-                                    partitionby=["group", "age_new_2"], skipna=True)
-                .applyPandasFunc("rolling", ["age_new", "id"], new_col=["age_new_5", "id_new_5"], orderby="order", partitionby="id",
-                                    window=3, win_type='gaussian', roll_agg_func="sum(std=2)")
-                .applyPandasFunc("std", "age_new", partitionby="id_new_3")
-                .applyPandasFunc(np.unwrap, "angle", new_col="unwrap", orderby="num", partitionby="group", axis=0)
-                .applyPandasFunc(np.unwrap, ["angle"], new_col=["unwrap_2"], orderby="num", partitionby="group", axis=0)
-                .orderBy("id", "order")).show()
+            >>> display(df
+                        .applyPandasFunc(pd.DataFrame.interpolate, "age", new_col="age_new", orderby="order", partitionby="id",
+                         method="ffill")
+                        .applyPandasFunc("interpolate", "age", new_col="age_new_2", orderby="order", partitionby="id", method="bfill")
+                        .applyPandasFunc("cumsum", ["age", "id"], new_col=["age_new_3", "id_new_3"], orderby="order", ascending=False,
+                         partitionby=["group", "age_new_2"], skipna=True)
+                        .applyPandasFunc(pd.DataFrame.cumsum, ["age", "id"], new_col=["age_new_4", "id_new_4"], orderby="order",
+                         ascending=False, partitionby=["group", "age_new_2"], skipna=True)
+                        .applyPandasFunc("rolling", ["age_new", "id"], new_col=["age_new_5", "id_new_5"], orderby="order", partitionby="id",
+                         window=3, win_type='gaussian', roll_agg_func="sum(std=2)")
+                        .applyPandasFunc("std", "age_new", partitionby="id_new_3")
+                        .applyPandasFunc(np.unwrap, "angle", new_col="unwrap", orderby="num", partitionby="group", axis=0)
+                        .applyPandasFunc(np.unwrap, ["angle"], new_col=["unwrap_2"], orderby="num", partitionby="group", axis=0)
+                        .orderBy("group", "num"))
         """
     
         def wrapper(pdf: pd.DataFrame) -> pd.DataFrame:
@@ -314,12 +318,10 @@ class DataFrame(OriginalSparkDataFrame):
                                             (2, 1, np.nan,  12, -5.49, 4), (3, 1, np.nan, 12, 6.28, 5), (5, 1, 30., 13, 0., 6),
                                             (1, 1, 30., 13, -0.78, 7), (1, 2, 75., 13, 1.57, 8), (10, 2, np.nan, 13, 5.49, 9),
                                             (100, 2, 98., 13, 46.28, 10)], ("order", "id", "age", "group", "angle", "num"))
-            >>> display(df.mapPandasFunc(lambda series: modulo(series, 2 * np.pi), "angle", "angle_mod")
+            >>> display(df
+                        .mapPandasFunc(lambda series: modulo(series, 2 * np.pi), "angle", "angle_mod")
                         .mapPandasFunc(modulo, F.col("angle"), "angle_mod_2", n=2*np.pi)
-                        .mapPandasFunc(modulo, ["angle"], "angle_mod_3", n=2*np.pi)
-                        .mapPandasFunc(modulo, [F.col("angle")], F.col("angle_mod_4"), n=2*np.pi)
-                        .mapPandasFunc(modulo, F.col("angle"), [F.col("angle_mod_5")], n=2*np.pi)
-                        .mapPandasFunc(modulo, "angle_mod_2", n=2*np.pi))
+                        .mapPandasFunc(modulo, ["order", "id"], [F.col("ord_mod"), "id_mod"], n=2))
         """
         
         def wrapper(itr: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
@@ -372,18 +374,18 @@ class DataFrame(OriginalSparkDataFrame):
             Stacked Pyspark Dataframe
         """
 
-        if type(cols) == str:
+        if isinstance(cols, str):
             return (self.selectExpr(*[col for col in self.columns if col != cols],
                     f"stack(1, '{cols}', {cols}) as ({stack_cols_dict['key']}, {stack_cols_dict['value']})"))
-        elif type(cols) == list:
-            if type(cols[0]) == str:
+        elif isinstance(cols, list):
+            if isinstance(cols[0], str):
                 stack_cols = ", ".join([f"'{cols[i]}', {cols[i]}" for i, _ in enumerate(cols)])
             return (self
                     .selectExpr(*[col for col in self.columns if col not in cols],
                                 f"stack({len(cols)}, {stack_cols}) as ({stack_cols_dict['key']}, {stack_cols_dict['value']})")
                     .filter(F.col(stack_cols_dict['value']).isNotNull()))
         ## fonctionne sur des noms de colonnes indexés avec un entier débutant à 1 (à généraliser en remplaçant le i du enumerate par une liste d'id => ammènerait à modifier la regex en passant la liste des id ou en générant la liste à partir d'une regex)
-        elif type(cols[0]) in [list, tuple]:
+        elif isinstance(cols[0], (list, tuple)):
             stack_cols = ", ".join([f"'{i+1}', struct({', '.join([f'{col} as {rename(col)}' for col in cols_i])})" for i, cols_i in enumerate(cols)])
             self = (self.selectExpr(*[col for col in self.columns if col not in flattenIterable(cols)],
                                     f"stack({len(cols)}, {stack_cols}) as ({stack_cols_dict['key']}, {stack_cols_dict['value']})"))
@@ -519,7 +521,7 @@ def _wrapDataFrameMethods(cls, DataFrame_methods_wrapper):
 def _dfMethodsDecorator(func):
     def call(*args, **kwargs):
         result = func(*args, **kwargs)
-        if type(result) if pyspark.sql.dataframe.DataFrame:
+        if type(result) is pyspark.sql.dataframe.DataFrame:
             return DataFrame(result) 
         else:
             return result

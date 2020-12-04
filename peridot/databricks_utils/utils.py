@@ -102,7 +102,7 @@ def save_dataframe(self, path="", convert_to="csv", dbfs_path="", **kwargs):
             pass #convertir en spark dataframe et transformer le elif suivant en if
     elif isinstance(self, pyspark.sql.dataframe.DataFrame):
         convert_to = "com.microsoft.azure.cosmosdb.spark" if convert_to == "cosmosdb" else convert_to
-        coalesce = ".coalesce(1)" if convert_to in flat_files+["cosmosdb"] else ""
+        coalesce = ".repartition(1)" if convert_to in flat_files+["cosmosdb"] else ""
         repartition = f".partitionBy(\"{props['repartition']}\")" if "repartition" in props.keys() else ""
         mode = f".mode(\"{props['mode']}\")" if "mode" in props.keys() else ""
         options = f".options(**{props['options']})" if "options" in props.keys() else ""
@@ -130,4 +130,4 @@ def save_dataframe(self, path="", convert_to="csv", dbfs_path="", **kwargs):
             spark.sql(f"CREATE TABLE IF NOT EXISTS delta.{table_name} USING DELTA LOCATION {save_path}")
 
 pd.core.frame.DataFrame.save = save_dataframe
-DataFrame.save = save_dataframe
+# DataFrame.save = save_dataframe

@@ -15,7 +15,7 @@ def unstack_indices(df_hpc_source, var_to_consider):
   return df_hpc_select
 
 ## Initialize df_hpc_resample with time index
-def create_time_index(start, end, cranes_list):
+def create_time_index_v1(start, end, cranes_list):
   time_df = spark.createDataFrame(pd.date_range(start, end,
                                                 freq="S")#, tz=tz)
                                   .to_frame(), [date_var]).cache()
@@ -35,7 +35,7 @@ def create_time_index(start, end, cranes_list):
   return df_hpc_resample
 
 to_timestamp_format = lambda date: int(time.mktime(datetime.strptime(date, "%Y-%m-%d %H:%M:%S").timetuple()))
-def create_time_index_2(start, end, cranes_dict, timestamp_var=timestamp_var):
+def create_time_index_v2(start, end, cranes_dict, timestamp_var=timestamp_var):
   return (spark
           .range(to_timestamp_format(start), to_timestamp_format(end) + 1, numPartitions=50)
           .rdd.map(lambda row: (datetime.fromtimestamp(row["id"]), *cranes_dict.keys))
@@ -43,6 +43,19 @@ def create_time_index_2(start, end, cranes_dict, timestamp_var=timestamp_var):
           .stack([*cranes_dict.values], stack_cols_dict={"key": "Crane", "value": "system_id"})
           .repartition("system_id"))
 #           .orderBy("timestamp"))
+
+#v3
+def create_time_index(start, end, cranes_dict, date_var=date_var):
+  return (spark
+          .range(to_timestamp_format(start), to_timestamp_format(end) + 1, numPartitions=50)
+          .select(F.mapPandas("id", lambda series: series.apply(lambda val: pd.Timestamp(val, unit="s")
+                                                                              .strftime("%Y-%m-%d %H:%M:%S")),
+                              returntype=StringType()).alias(date_var),
+                  *[F.lit(k).alias(v) for k, v in cranes_dict.items()])
+          .stack([*cranes_dict.values()], stack_cols_dict={"key": "Crane", "value": "system_id"})
+          .repartition("system_id")
+          .drop("Crane")#en attendant d'avoir intégré les implications du field Crane déjà créé
+          .cache())
 
 ## Resampling data
 def resample(df_hpc_select, df_hpc_resample,
@@ -87,7 +100,8 @@ def resample(df_hpc_select, df_hpc_resample,
                                                                                                fill_limit - 1)))
                                                                .otherwise(F.col(f"time_interval_{indice}")))
                        # Method of filling according to the time interval between two records
-                       .transforms((lambda df: df.applyPandasFunc("interpolate", indice, new_col=f"{indice}_fill_{fill_mode}",
+                       .transforms((lambda df: df.applyPandasFunc("interpolate", indice,
+                                                                  new_col=f"{indice}_fill_{fill_mode}",
                                                                   orderby=date_var, partitionby="system_id",
                                                                   method=fill_mode, limit=fill_limit)
                                     for fill_mode in fill_mode_lst))
@@ -110,7 +124,7 @@ def affect_states(df_hpc_resample):
                  if f"{col}_fill" in df_hpc_resample.columns]
   
   df_processing = (df_hpc_resample
-                   .repartition("system_id", F.year(date_var), F.dayofyear(date_var))
+                   .repartition("system_id")#, F.year(date_var), F.dayofyear(date_var))
                    .withColumn("wind_off",
                                F.when((F.col("engine_on_fill") == F.lit(1)) &
                                       (F.col("weather_vane_fill") == F.lit(1)), F.lit(1))
@@ -157,7 +171,7 @@ def affect_states(df_hpc_resample):
                                 .otherwise(0)))
   return df_processing
 
-## Returns an hourly aggregated dataset
+## Rename fields and fill gaps at midnight
 def format_for_cosmosdb(df_processing):
   sqlContext.sql("set spark.sql.caseSensitive=true")
   rename = {"system_id": "system_id",
@@ -178,7 +192,7 @@ def format_for_cosmosdb(df_processing):
               .drop(*list(rename.keys())[2:])
 #               .transform(lambda df: StringIndexer(inputCol="state", outputCol="state_pass").fit(df).transform(df)) #not whitelisted
               .withColumn("state_pass", F.mapWithDict("state", {v: k+1 for k, v in enumerate(list(rename.values())[2:])},
-                                                      returntype=StringType()))
+                                                      returntype=IntegerType()))
               .withColumn("state_pass", F.incrementalCut(F.col("state_pass"), "!= 0", orderby=date_var,
                                                          partitionby="system_id"))
               ## Processing of no data at midnight
@@ -196,21 +210,16 @@ def format_for_cosmosdb(df_processing):
                                                                                                     .orderBy(date_var)))
                                                           .over(Window.partitionBy("state_pass")), F.array(F.lit("No data")))
                                            .getItem(0))
-                                    .otherwise(F.col("state")))
-#               .filter((F.col("test").isNotNull()))
-#               .groupBy("state_pass")
-#               .agg(F.first("system_id").alias("system_id"),
-#                    F.min(date_var).alias("start"),
-#                    F.max(date_var).alias("end"),
-#                    F.collect_set("test"),
-#                    F.collect_set("state"))
-#               .orderBy("system_id", "start"))
-                                         
-              ## Daily aggregation
+                                    .otherwise(F.col("state"))))
+  return df_state
+
+## Returns a daily aggregated dataset
+def daily_aggregate(df_state):
+  df_state = (df_state
               .groupBy("system_id", F.year(date_var).alias("Year"), F.dayofyear(date_var).alias("Dayofyear"),
 #                        F.hour(date_var).alias("Hours"),
                        F.col("state").alias("State"))
-              .agg(F.from_unixtime(F.unix_timestamp(F.min(date_var)), "yyyy-MM-dd hh:mm:ss").alias("Date"),
+              .agg(F.from_unixtime(F.unix_timestamp(F.min(date_var)), "yyyy-MM-dd HH:mm:ss").alias("Date"),
                    F.month(F.first(date_var)).alias("Month"),
                    F.weekofyear(F.first(date_var)).alias("Week"),
                    F.date_format(F.first(date_var), 'EEEE').alias("Dayofweek"),
@@ -219,7 +228,7 @@ def format_for_cosmosdb(df_processing):
 #                    F.count("state_pass").alias("count_sec"),
                    (F.count("state_pass") / 3600).alias("count_hour"))
               .withColumn("id", F.concat_ws("_", *["system_id", "State", "Year", "Dayofyear"]))#, "Hours"]))
-              .withColumn("Crane", F.mapWithDict(F.col("system_id"), crane_id_dict, returntype=StringType()))
+              .withColumn("Crane", F.mapWithDict("system_id", crane_id_dict, returntype=StringType()))
               .withColumn("OnOff", F.when(F.col("State") != "No data",
                                            F.when(F.col("State").isin(["Movement", "Working", "Stand by"]), F.lit("On"))
                                             .otherwise(F.lit("Off")))
