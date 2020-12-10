@@ -379,5 +379,6 @@ def _dfMethodsDecorator(func):
             return result
     return call
 
-for cla in [pyspark.sql.session.SparkSession, pyspark.sql.readwriter.DataFrameReader, DataFrame, OriginalSparkDataFrame]:
+for cla in [pyspark.sql.session.SparkSession, pyspark.sql.readwriter.DataFrameReader,
+            DataFrame, OriginalSparkDataFrame, pyspark.sql.group.GroupedData]:
     _wrapDataFrameMethods(cla, _dfMethodsDecorator)
