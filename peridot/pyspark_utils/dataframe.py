@@ -317,26 +317,44 @@ class DataFrame(OriginalSparkDataFrame):
             Tuple of updated Spark DataFrame, input and output columns to process 
         """
         
-        col = _colsAsListOfStrings(col)
+        col = _colsAsListOfColumns(col)
         if new_col is None:
-            new_col = col
+            new_col = _colsAsListOfStrings(col)
         else:
             new_col = _colsAsListOfStrings(new_col)
-            self = eval(f"self.withColumns({col}, lambda col: F.col(col), {new_col})")
+            self = self.withColumns(col, lambda col: col, new_col)
         return self, col, new_col
 
 
 ## Private functions
+
+def _colsAsListOfColumns(colArg):
+    """
+    Formats a column(s) input such as Spark column or Spark column name or list of these, as a list of Spark column(s)
+
+    Parameters:
+        colArg (str or Column or list): function arg to be formatted
+
+    Returns:     
+        List of Spark column(s)
+    """
+    
+    toColumn = lambda cols: [elem if isinstance(elem, pyspark.sql.column.Column)
+                             else F.col(elem) for elem in cols]
+    if not isinstance(colArg, list):
+        colArg = [colArg]
+    return toColumn(colArg)
+
 
 def _colsAsListOfStrings(colArg):
     """
     Formats a column(s) input such as Spark column or Spark column name or list of these, as a list of column name(s)
 
     Parameters:
-        colArg (str or Column or list): function input to be formatted
+        colArg (str or Column or list): function arg to be formatted
 
     Returns:     
-        List of column names
+        List of column name(s)
     """
 
     toString = lambda cols: [elem if not isinstance(elem, pyspark.sql.column.Column)

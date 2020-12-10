@@ -1,6 +1,6 @@
 
 def showConf():
-    display(sc.parallelize(sorted(sc._conf.getAll())).toDF(["Parameters", "Settings"]))
+    display(spark.createDataFrame(sorted(sc._conf.getAll()), ["Parameters", "Settings"]))
 
 
 

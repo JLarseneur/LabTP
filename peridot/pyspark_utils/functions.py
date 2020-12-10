@@ -1,4 +1,4 @@
-# from ..default import *
+from peridot.default import *
 
 from pyspark.sql.functions import *
 
@@ -142,7 +142,7 @@ def mapPandas(col, func, returntype, **params):
     
     def wrapper(s: pd.Series) -> pd.Series:
         return F.pandas_udf(lambda col: func(col, **params),
-                            returnType=returntype)(F.col(s))
+                            returnType=returntype)(_colAsStringOrColumn(col))
     return wrapper(col)
 
 # F.mapPandas = mapPandas
@@ -168,3 +168,18 @@ def mapWithDict(col, dico, returntype):
 
 # F.mapWithDict = mapWithDict
 
+
+## Private functions
+
+def _colAsStringOrColumn(colArg):
+    """
+    Returns a Spark column object whatever the argument by which it was passed
+
+    Parameters:
+        colArg (str or Column): function input to be formatted
+
+    Returns:     
+        Spark column
+    """
+
+    return F.col(colArg) if isinstance(colArg, str) else colArg

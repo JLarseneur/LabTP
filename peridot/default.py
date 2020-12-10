@@ -1,6 +1,6 @@
 import pyspark
 # import pyspark.sql.functions as F
-import pyspark_utils.functions as F
+import peridot.pyspark_utils.functions as F
 from pyspark.sql.window import Window
 # from pyspark.sql import DataFrame
 from pyspark.sql.types import *
