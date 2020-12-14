@@ -14,6 +14,7 @@ try:
     import plotly
     import plotly.express as px
     import plotly.graph_objects as go
+    import plotly.figure_factory as ff
     from plotly.subplots import make_subplots
     pd.options.plotting.backend = "plotly"
 except:
@@ -21,10 +22,10 @@ except:
 
 
 ## Get SparkSession to be able to use functions such as spark.sql or spark.sql without needing to set it as a parameter
-from pyspark.sql import SparkSession
-try:
-    ## Spark 3
-    spark = SparkSession.getActiveSession()
-except:
-    ## Spark 2
-    spark = SparkSession.builder.getOrCreate()
+# from pyspark.sql import SparkSession
+# try:
+#     ## Spark 3
+#     spark = SparkSession.getActiveSession()
+# except:
+#     ## Spark 2
+#     spark = SparkSession.builder.getOrCreate()
