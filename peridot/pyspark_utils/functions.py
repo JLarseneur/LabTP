@@ -1,6 +1,8 @@
 from peridot.default import *
 
 from pyspark.sql.functions import *
+from pyspark.sql.types import *
+from pyspark.sql.column import Column, _to_java_column, _to_seq
 
 ## new SQL column functions like
 
@@ -169,6 +171,12 @@ def mapWithDict(col, dico, returntype):
 # F.mapWithDict = mapWithDict
 
 
+def median(col):
+    return _sqlFunc("percentile", [_colAsStringOrColumn(col), F.lit(0.5)])
+
+F.median = median
+
+
 ## Private functions
 
 def _colAsStringOrColumn(colArg):
@@ -183,3 +191,18 @@ def _colAsStringOrColumn(colArg):
     """
 
     return F.col(colArg) if isinstance(colArg, str) else colArg
+
+
+def _sqlFunc(func, *params):
+    """
+    SQL aggregate function called by name to run over groubBy
+
+    Parameters:
+        func (str): SQL function name
+
+    Returns:     
+        Spark column
+    """
+    
+    return Column(spark.sparkContext._jvm.org.apache.spark.sql.functions.callUDF(func,
+                                                                                 _to_seq(sc, *params, _to_java_column)))
