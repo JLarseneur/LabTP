@@ -112,7 +112,7 @@ def incrementalCut(col, expr, orderby, partitionby=None):
 
     col = F.col(col) if type(col) == str else col
     win = Window.partitionBy(partitionby).orderBy(orderby) if partitionby else Window.orderBy(orderby)
-    return (F.last(F.when(eval("(col - F.lag(col).over(win))" + expr) |
+    return (F.last(F.when(eval(f"col {expr} F.lag(col).over(win)") |
                           (F.row_number().over(win) == F.lit(1)),
                           F.monotonically_increasing_id() + F.lit(1))
                     .otherwise(F.lit(None)), ignorenulls=True)
