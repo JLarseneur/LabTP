@@ -24,6 +24,9 @@ def load_dataset(datasource, cols, tz, timestamp_var="recordDate",
         Update parameters docstring
     """
 
+    ## Updates the hours timezone offset
+    spark.conf.set("spark.sql.session.timeZone", tz)
+
     ## Special parameters
     props = {"date_var": "date"}
     props.update(kwargs)
