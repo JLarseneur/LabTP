@@ -121,7 +121,7 @@ def incrementalCut(col, expr, orderby, partitionby=None):
 # F.incrementalCut = incrementalCut
 
 
-def mapPandas(col, func, returntype, **params):
+def mapPandas(col, func, returntype, row_func=False, **params):
     """
     Apply a pandas Series function to a Spark column
 
@@ -136,14 +136,28 @@ def mapPandas(col, func, returntype, **params):
     Examples:
         >>> display(spark.range(5, numPartitions=1)
                          .select(F.col("id"),
+                                 F.mapPandas(F.sqrt("id"), np.round, returntype=DoubleType(), decimals=2).alias("sqrt_round"),
                                  F.mapPandas("id", lambda series: series.apply(lambda val: pd.Timestamp(val, unit="s")
                                                                                            .strftime("%Y-%m-%d %H:%M:%S")),
                                              returntype=StringType()).alias("date"),
                                  F.mapPandas("id", pd.Series.diff, returntype=IntegerType(), periods=2).alias("diff")))
+        >>> display(sc.parallelize([[.1, 1, 1], [.2, 2, 1], [.3, 3, 1], [.4, 4, 1], [.5, 5, 1], [.6, 6, 1], [.1, 7, 2], [.2, 8, 2],
+                                    [.3, 9, 2], [.4, 10, 2], [.3, 11, 2], [.4, 12, 2], [None, 13, 2], [None, None, None], 
+                                    [.1, 14, 3], [.2, 15, 3], [.3, 16, 3], [.4, 17, 3]]).toDF(("PM_RING", "date", "ring"))
+                    .withColumn("list", F.collect_list(F.least("PM_RING", "date", "ring")).over(Window.rowsBetween(-2, Window.currentRow)))
+                    .withColumn("min", F.mapPandas("list", np.min, returntype=FloatType(), row_func=True, initial=.35))
+                    .withColumn("diff2", F.mapPandas("min", pd.Series.diff, returntype=FloatType(), periods=2))
+                    .withColumn("datetime", F.mapPandas(F.when(F.col("date").isNotNull(), F.col("date")).otherwise(F.lit(0)),
+                                                        lambda series: series.apply(lambda val: pd.Timestamp(val, unit="s")
+                                                                                    .strftime("%Y-%m-%d %H:%M:%S")), returntype=StringType()))
+                    .withColumn("datetime2", F.mapPandas(F.when(F.col("date").isNotNull(), F.col("date")).otherwise(F.lit(0)),
+                                                         lambda val: pd.Timestamp(val, unit="s").strftime("%Y-%m-%d %H:%M:%S"),
+                                                         returntype=StringType(), row_func=True)))
     """
     
     def wrapper(s: pd.Series) -> pd.Series:
-        return F.pandas_udf(lambda col: func(col, **params),
+        return F.pandas_udf(lambda col: (lambda series: series.apply(lambda val: func(val, **params)))(col) if row_func else
+                                        func(col, **params),
                             returnType=returntype)(_colAsStringOrColumn(col))
     return wrapper(col)
 
