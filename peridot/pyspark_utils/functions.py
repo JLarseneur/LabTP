@@ -124,10 +124,14 @@ def incrementalCut(col, expr, orderby, partitionby=None):
 def mapPandas(col, func, returntype, row_func=False, **params):
     """
     Apply a pandas Series function to a Spark column
+    Can be used as an aggregation function and mixed with the native functions
 
     Parameters:
         col (str or Column): column, column name, to be processed
         func (function): function to be applied
+        returntype (pyspark.sql.types): type of the returned Spark column
+        row_func (bool): for simplification purposes, this variable specifies whether the function takes a pandas Series or a pandas Row as input,
+        allowing func to be defined without implementing this level of detail in its definition
         params (kwargs): parameters of the func
 
     Returns:     
@@ -153,6 +157,11 @@ def mapPandas(col, func, returntype, row_func=False, **params):
                     .withColumn("datetime2", F.mapPandas(F.when(F.col("date").isNotNull(), F.col("date")).otherwise(F.lit(0)),
                                                          lambda val: pd.Timestamp(val, unit="s").strftime("%Y-%m-%d %H:%M:%S"),
                                                          returntype=StringType(), row_func=True)))
+        >>> display(spark.createDataFrame([(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v"))
+                    .groupby("id").agg(F.max("v"), *[F.mapPandas(F.collect_list("v"),
+                                                                 lambda s: s.apply(func), DoubleType()).alias(name)
+                                                     for func, name in [(np.mean, "mean"), (np.median, "median"), (np.max, "max"),
+                                                                        (partial(np.quantile, q=0.5), "median")]]))
     """
     
     def wrapper(s: pd.Series) -> pd.Series:
