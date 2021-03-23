@@ -106,6 +106,7 @@ def save_dataframe(self, path="", convert_to="csv", dbfs_path="", **kwargs):
         repartition = f".partitionBy(\"{props['repartition']}\")" if "repartition" in props.keys() else ""
         mode = f".mode(\"{props['mode']}\")" if "mode" in props.keys() else ""
         options = f".options(**{props['options']})" if "options" in props.keys() else ""
+        description = f" COMMENT \'{props['description']}\'" if "description" in props.keys() else ""
         if convert_to in flat_files:
             save_path = f"\"dbfs:{props['dbfs_path']}{path}\""
         elif convert_to == "delta":
@@ -127,7 +128,9 @@ def save_dataframe(self, path="", convert_to="csv", dbfs_path="", **kwargs):
         ## Creation of the Delta table in case it doesn't exist
         if convert_to == "delta":
             table_name = [elem for elem in path.split("/") if elem][-1]
-            spark.sql(f"CREATE TABLE IF NOT EXISTS delta.{table_name} USING DELTA LOCATION {save_path}")
+            spark.sql(f"CREATE TABLE IF NOT EXISTS delta.{table_name} USING DELTA LOCATION {save_path} {description}")
+            if "properties" in props.keys():
+                spark.sql(f"""ALTER TABLE delta.{table_name} SET TBLPROPERTIES ('{props["properties"][0]}' = '{props["properties"][1]}')""")
 
 pd.core.frame.DataFrame.save = save_dataframe
 # DataFrame.save = save_dataframe
