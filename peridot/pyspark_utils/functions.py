@@ -121,26 +121,31 @@ def incrementalCut(col, expr, orderby, partitionby=None):
 # F.incrementalCut = incrementalCut
 
 
-def mapPandas(col, func, returntype, row_func=False, **params):
+def mapPandas(cols, func, returntype, row_func=False, **params):
     """
-    Apply a pandas Series function to a Spark column
+    Apply a pandas Series function to one or more Spark columns
     Can be used as an aggregation function and mixed with the native functions
+    by first performing a collect_list (possibly over a partition)
 
     Parameters:
-        col (str or Column): column, column name, to be processed
+        cols (str or column or list): column, column name or list of them, to be processed
         func (function): function to be applied
         returntype (pyspark.sql.types): type of the returned Spark column
-        row_func (bool): for simplification purposes, this variable specifies whether the function takes a pandas Series or a pandas Row as input,
-        allowing func to be defined without implementing this level of detail in its definition
+        row_func (bool): for simplification purposes, when the func expression is ambiguous or can not be applied directly on a series,
+        this variable is designed to underneath modify the function and take a pandas Series or a pandas Row as input
         params (kwargs): parameters of the func
 
     Returns:     
         Spark Column
     
     Examples:
+        >>> display(spark.createDataFrame([(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v"))
+                    .withColumn("tutu", F.mapPandas(F.collect_list("v").over(Window.partitionBy("id")),
+                                                    lambda s: s.apply(np.mean), DoubleType())))
         >>> display(spark.range(5, numPartitions=1)
                          .select(F.col("id"),
-                                 F.mapPandas(F.sqrt("id"), np.round, returntype=DoubleType(), decimals=2).alias("sqrt_round"),
+                                 F.mapPandas([F.col("id"), "id"], lambda cols: np.add(*cols), returntype=IntegerType()),
+                                 F.mapPandas([F.sqrt("id")], np.round, returntype=DoubleType(), decimals=2).alias("sqrt_round"),
                                  F.mapPandas("id", lambda series: series.apply(lambda val: pd.Timestamp(val, unit="s")
                                                                                            .strftime("%Y-%m-%d %H:%M:%S")),
                                              returntype=StringType()).alias("date"),
@@ -149,26 +154,35 @@ def mapPandas(col, func, returntype, row_func=False, **params):
                                     [.3, 9, 2], [.4, 10, 2], [.3, 11, 2], [.4, 12, 2], [None, 13, 2], [None, None, None], 
                                     [.1, 14, 3], [.2, 15, 3], [.3, 16, 3], [.4, 17, 3]]).toDF(("PM_RING", "date", "ring"))
                     .withColumn("list", F.collect_list(F.least("PM_RING", "date", "ring")).over(Window.rowsBetween(-2, Window.currentRow)))
-                    .withColumn("min", F.mapPandas("list", np.min, returntype=FloatType(), row_func=True, initial=.35))
-                    .withColumn("diff2", F.mapPandas("min", pd.Series.diff, returntype=FloatType(), periods=2))
+                    .withColumn("min2", F.mapPandas("list", np.min, row_func=True, returntype=FloatType(), initial=.35))
+                    .withColumn("diff2", F.mapPandas("min2", pd.Series.diff, returntype=FloatType(), periods=2))
                     .withColumn("datetime", F.mapPandas(F.when(F.col("date").isNotNull(), F.col("date")).otherwise(F.lit(0)),
                                                         lambda series: series.apply(lambda val: pd.Timestamp(val, unit="s")
                                                                                     .strftime("%Y-%m-%d %H:%M:%S")), returntype=StringType()))
                     .withColumn("datetime2", F.mapPandas(F.when(F.col("date").isNotNull(), F.col("date")).otherwise(F.lit(0)),
-                                                         lambda val: pd.Timestamp(val, unit="s").strftime("%Y-%m-%d %H:%M:%S"),
-                                                         returntype=StringType(), row_func=True)))
+                                                         lambda val, unit: pd.Timestamp(val, unit=unit).strftime("%Y-%m-%d %H:%M:%S"),
+                                                         returntype=StringType(), row_func=True, unit="h")))
         >>> display(spark.createDataFrame([(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v"))
-                    .groupby("id").agg(F.max("v"), *[F.mapPandas(F.collect_list("v"),
+                    .groupby("id").agg(F.max("v"),
+                                       *[F.mapPandas(F.collect_list("v"),
                                                                  lambda s: s.apply(func), DoubleType()).alias(name)
                                                      for func, name in [(np.mean, "mean"), (np.median, "median"), (np.max, "max"),
                                                                         (partial(np.quantile, q=0.5), "median")]]))
     """
     
-    def wrapper(s: pd.Series) -> pd.Series:
-        return F.pandas_udf(lambda col: (lambda series: series.apply(lambda val: func(val, **params)))(col) if row_func else
-                                        func(col, **params),
-                            returnType=returntype)(_colAsStringOrColumn(col))
-    return wrapper(col)
+    ## v1
+    # def wrapper(s: pd.Series) -> pd.Series:
+    #     return F.pandas_udf(lambda col: (lambda series: series.apply(lambda val: func(val, **params)))(col) if row_func else
+    #                                     func(col, **params),
+    #                         returnType=returntype)(_colAsStringOrColumn(col))
+    # return wrapper(col)
+
+    @pandas_udf(returntype)
+    def wrapper(iterator: Iterator[Tuple[pd.Series, ...]]) -> Iterator[pd.Series]:
+        for columns in iterator:
+            yield ((lambda series: series.apply(lambda val: func(val, **params)))(columns) if row_func
+                   else func(columns, **params))
+    return wrapper(*_colsAsListOfColumns(cols))
 
 # F.mapPandas = mapPandas
 ## A généraliser avec F.arrayFunc ?
