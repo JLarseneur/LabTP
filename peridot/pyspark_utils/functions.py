@@ -169,19 +169,12 @@ def mapPandas(cols, func, returntype, row_func=False, **params):
                                                      for func, name in [(np.mean, "mean"), (np.median, "median"), (np.max, "max"),
                                                                         (partial(np.quantile, q=0.5), "median")]]))
     """
-    
-    ## v1
-    # def wrapper(s: pd.Series) -> pd.Series:
-    #     return F.pandas_udf(lambda col: (lambda series: series.apply(lambda val: func(val, **params)))(col) if row_func else
-    #                                     func(col, **params),
-    #                         returnType=returntype)(_colAsStringOrColumn(col))
-    # return wrapper(col)
 
     @pandas_udf(returntype)
     def wrapper(iterator: Iterator[Tuple[pd.Series, ...]]) -> Iterator[pd.Series]:
         for columns in iterator:
-            yield ((lambda series: series.apply(lambda val: func(val, **params)))(columns) if row_func
-                   else func(columns, **params))
+            yield (lambda cols: pd.concat([*cols], axis=1).apply(lambda row: func(row, **params), axis=1) if row_func
+                                else func(cols, **params))(columns)
     return wrapper(*_colsAsListOfColumns(cols))
 
 # F.mapPandas = mapPandas
