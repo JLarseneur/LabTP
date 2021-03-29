@@ -73,6 +73,31 @@ class DataFrame(OriginalSparkDataFrame):
         return self.groupBy(partitionby).applyInPandas(wrapper, schema=self.schema)
 
 
+    def colsRenamed(self, func, cols=None):
+        """
+        Rename columns of DataFrame
+
+        Parameters:
+            func (function): transformation to apply on cols
+            cols (list or None): list of columns or all columns if None (default)
+
+        Returns:     
+            Spark DataFrame
+        
+        Examples:
+            >>> display(spark.table("ds166_live")
+                        .colsRenamed(_removePrefixAndBackticks)
+                        .colsRenamed(lambda col: col + "_1" if col.startswith("s") else col, ["system_id"]))
+        """
+        def _(df, cols=cols):
+            if not cols:
+                cols = df.columns
+            newcols = list(map(lambda col: F.col(f"`{col}`").alias(func(col)) if col in cols
+                            else F.col(col), df.columns))
+            return df.select(newcols)
+        return _(self, cols)
+
+
     def flatStruct(self, cols=None, remove_tree=False):
         """
         Flatten Spark Struct Columns
@@ -362,6 +387,10 @@ def _colsAsListOfStrings(colArg):
     if not isinstance(colArg, list):
         colArg = [colArg]
     return toString(colArg)
+
+
+def _removePrefixAndBackticks(col):
+    return col if '.' not in col else col.split('.')[-1]
 
 
 ## Modifies the methods that return Spark DataFrames to instanciate the extended peridot Spark DataFrame
