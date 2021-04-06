@@ -234,6 +234,26 @@ class DataFrame(OriginalSparkDataFrame):
             return self.flatStruct([stack_cols_dict["value"]], remove_tree=remove_tree)
 
 
+    def toDict(self, key, value):
+        """
+        Transforms two columns into (key, value) pairs, in the form of a python dictionary
+        
+        Parameters:
+        key: Spark column
+        value: Spark column
+        
+        Returns:     
+        Python dict
+        """
+        
+        key_string, value_string = _colsAsListOfStrings([key, value])
+        return (self
+                .select(key, value)
+                .toPandas()
+                .set_index(key_string)
+                .to_dict(orient='dict')[value_string])
+
+
     def toList(self, col):
         """
         Transform a column to a list
