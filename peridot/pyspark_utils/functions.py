@@ -101,8 +101,8 @@ def incrementalCut(col, expr, orderby, partitionby=None):
     Returns a unique id for each interval without variation
     
     Parameters:
-        col: Spark column or column name
-        expr (str): expression to be evaluated as a condition for group change
+        col: Spark column or column name (can be either numerical, string, stuct, expression...)
+        expr (str): sign of comparison to be evaluated as a condition for id change
         orderby: definition of the ordering
         partitionby: definition of the partitioning (default: no partition)
     
@@ -110,7 +110,7 @@ def incrementalCut(col, expr, orderby, partitionby=None):
         Spark column
     """
 
-    col = F.col(col) if type(col) == str else col
+    col = _colAsStringOrColumn(col)
     win = Window.partitionBy(partitionby).orderBy(orderby) if partitionby else Window.orderBy(orderby)
     return (F.last(F.when(eval(f"col {expr} F.lag(col).over(win)") |
                           (F.row_number().over(win) == F.lit(1)),
