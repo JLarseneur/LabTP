@@ -5,7 +5,6 @@ from ..databricks_utils.utils import save_dataframe
 from __future__ import annotations
 from pyspark.sql import DataFrame as OriginalSparkDataFrame
 
-from typing import Iterator, Iterable
 import types
 
 ## An extended version of Spark's DataFrames
@@ -234,7 +233,7 @@ class DataFrame(OriginalSparkDataFrame):
             return self.flatStruct([stack_cols_dict["value"]], remove_tree=remove_tree)
 
 
-    def toDict(self, key, value):
+    def toDict(self, key=None, value=None):
         """
         Transforms two columns into (key, value) pairs, in the form of a python dictionary
         
@@ -245,6 +244,9 @@ class DataFrame(OriginalSparkDataFrame):
         Returns:     
         Python dict
         """
+        
+        if not key:
+            key, value = self.columns
         
         key_string, value_string = _colsAsListOfStrings([key, value])
         return (self
@@ -280,6 +282,24 @@ class DataFrame(OriginalSparkDataFrame):
         """
         
         return tuple(self.toList(col) for col in cols)
+    
+
+    def toSet(self, col, sort=False, **params):
+        """
+        Transform a column to a unique values list
+        
+        Parameters:
+        col: Spark column
+        
+        Returns:     
+        Python list
+        """
+        
+        res = list(self.select(col).distinct().toPandas()[col])
+        if not sort:
+            return res
+        else:
+            return sorted(res, **params)
 
 
     def unstack(self, index, pivot, fields=None, subpivot_val=None,
