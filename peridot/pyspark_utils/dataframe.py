@@ -233,13 +233,14 @@ class DataFrame(OriginalSparkDataFrame):
             return self.flatStruct([stack_cols_dict["value"]], remove_tree=remove_tree)
 
 
-    def toDict(self, key=None, value=None):
+    def toDict(self, key=None, value=None, dropna=True):
         """
         Transforms two columns into (key, value) pairs, in the form of a python dictionary
         
         Parameters:
         key: Spark column
         value: Spark column
+        dropna (bool): to remove None or null keys or values (default, True)
         
         Returns:     
         Python dict
@@ -251,6 +252,10 @@ class DataFrame(OriginalSparkDataFrame):
         key_string, value_string = _colsAsListOfStrings([key, value])
         return (self
                 .select(key, value)
+                .distinct()
+                .transform(lambda df: (df.filter((F.col(key).isNotNull()) |
+                                                 (F.col(value).isNotNull()))
+                                         .dropna()) if dropna else df)
                 .toPandas()
                 .set_index(key_string)
                 .to_dict(orient='dict')[value_string])
