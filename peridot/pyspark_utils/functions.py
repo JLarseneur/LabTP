@@ -55,7 +55,7 @@ def arrayWithoutNone(func):
 # F.arrayWithoutNone = arrayWithoutNone(F.array)
 
 
-def cumsum(col, orderby, partitionby=None):
+def cumsum(col, orderby, partitionby=F.lit(True)):
     """
     Computes the cumulative sum of a Pyspark column
     
