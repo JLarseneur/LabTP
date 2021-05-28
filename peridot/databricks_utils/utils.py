@@ -103,7 +103,8 @@ def save_dataframe(self, path="", convert_to="csv", dbfs_path="", **kwargs):
     elif isinstance(self, pyspark.sql.dataframe.DataFrame):
         convert_to = "com.microsoft.azure.cosmosdb.spark" if convert_to == "cosmosdb" else convert_to
         coalesce = ".repartition(1)" if convert_to in flat_files+["cosmosdb"] else ""
-        repartition = f".partitionBy(\"{props['repartition']}\")" if "repartition" in props.keys() else ""
+        cotes = '\"'
+        repartition = f".partitionBy(\"{props['repartition'] if isinstance(props['repartition'], str) else f'{cotes}, {cotes}'.join(props['repartition'])}\")" if "repartition" in props.keys() else ""
         mode = f".mode(\"{props['mode']}\")" if "mode" in props.keys() else ""
         options = f".options(**{props['options']})" if "options" in props.keys() else ""
         description = f" COMMENT \'{props['description']}\'" if "description" in props.keys() else ""
