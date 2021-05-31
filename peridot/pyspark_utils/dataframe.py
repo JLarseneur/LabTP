@@ -230,7 +230,9 @@ class DataFrame(OriginalSparkDataFrame):
                                         f"stack({len(cols)}, {stack_cols}) as ({stack_cols_dict['key']}, {stack_cols_dict['value']})"))
                 new_cols = re.sub(r"(:\w+|.*<)|>", "", self.select(stack_cols_dict['value']).schema.simpleString()).split(",")
                 self = self.filter(F.coalesce(*[F.col(stack_cols_dict['value']).getItem(col) for col in new_cols]).isNotNull())
-                return self.flatStruct([stack_cols_dict["value"]], remove_tree=remove_tree)
+                return (self
+                        .drop(*flattenIterable(cols))
+                        .flatStruct([stack_cols_dict["value"]], remove_tree=remove_tree))
 
 
     def toDict(self, key=None, value=None, dropna=True):
