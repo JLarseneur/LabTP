@@ -219,18 +219,18 @@ class DataFrame(OriginalSparkDataFrame):
         elif isinstance(cols, list):
             if isinstance(cols[0], str):
                 stack_cols = ", ".join([f"'{cols[i]}', {cols[i]}" for i, _ in enumerate(cols)])
-            return (self
-                    .selectExpr(*[col for col in self.columns if col not in cols],
-                                f"stack({len(cols)}, {stack_cols}) as ({stack_cols_dict['key']}, {stack_cols_dict['value']})")
-                    .filter(F.col(stack_cols_dict['value']).isNotNull()))
-        ## fonctionne sur des noms de colonnes indexés avec un entier débutant à 1 (à généraliser en remplaçant le i du enumerate par une liste d'id => ammènerait à modifier la regex en passant la liste des id ou en générant la liste à partir d'une regex)
-        elif isinstance(cols[0], (list, tuple)):
-            stack_cols = ", ".join([f"'{i+1}', struct({', '.join([f'{col} as {rename(col)}' for col in cols_i])})" for i, cols_i in enumerate(cols)])
-            self = (self.selectExpr(*[col for col in self.columns if col not in flattenIterable(cols)],
-                                    f"stack({len(cols)}, {stack_cols}) as ({stack_cols_dict['key']}, {stack_cols_dict['value']})"))
-            new_cols = re.sub(r"(:\w+|.*<)|>", "", self.select(stack_cols_dict['value']).schema.simpleString()).split(",")
-            self = self.filter(F.coalesce(*[F.col(stack_cols_dict['value']).getItem(col) for col in new_cols]).isNotNull())
-            return self.flatStruct([stack_cols_dict["value"]], remove_tree=remove_tree)
+                return (self
+                        .selectExpr(*[col for col in self.columns if col not in cols],
+                                    f"stack({len(cols)}, {stack_cols}) as ({stack_cols_dict['key']}, {stack_cols_dict['value']})")
+                        .filter(F.col(stack_cols_dict['value']).isNotNull()))
+            ## fonctionne sur des noms de colonnes indexés avec un entier débutant à 1 (à généraliser en remplaçant le i du enumerate par une liste d'id => ammènerait à modifier la regex en passant la liste des id ou en générant la liste à partir d'une regex)
+            elif isinstance(cols[0], (list, tuple)):
+                stack_cols = ", ".join([f"'{i+1}', struct({', '.join([f'{col} as {rename(col)}' for col in cols_i])})" for i, cols_i in enumerate(cols)])
+                self = (self.selectExpr(*[col for col in self.columns if col not in flattenIterable(cols)],
+                                        f"stack({len(cols)}, {stack_cols}) as ({stack_cols_dict['key']}, {stack_cols_dict['value']})"))
+                new_cols = re.sub(r"(:\w+|.*<)|>", "", self.select(stack_cols_dict['value']).schema.simpleString()).split(",")
+                self = self.filter(F.coalesce(*[F.col(stack_cols_dict['value']).getItem(col) for col in new_cols]).isNotNull())
+                return self.flatStruct([stack_cols_dict["value"]], remove_tree=remove_tree)
 
 
     def toDict(self, key=None, value=None, dropna=True):
