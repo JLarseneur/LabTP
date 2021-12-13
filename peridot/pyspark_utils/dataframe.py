@@ -6,6 +6,7 @@ from __future__ import annotations
 from pyspark.sql import DataFrame as OriginalSparkDataFrame
 
 import types
+import delta
 
 ## An extended version of Spark's DataFrames
 class DataFrame(OriginalSparkDataFrame):
@@ -456,5 +457,5 @@ def _dfMethodsDecorator(func):
     return call
 
 for cla in [pyspark.sql.session.SparkSession, pyspark.sql.readwriter.DataFrameReader,
-            DataFrame, OriginalSparkDataFrame, pyspark.sql.group.GroupedData]:
+            DataFrame, OriginalSparkDataFrame, pyspark.sql.group.GroupedData, delta.tables.DeltaTable]:
     _wrapDataFrameMethods(cla, _dfMethodsDecorator)
