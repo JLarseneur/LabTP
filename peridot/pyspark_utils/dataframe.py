@@ -353,24 +353,44 @@ class DataFrame(OriginalSparkDataFrame):
         return self
 
 
-    def withColumns(self, cols, func, new_cols=None):
+    def withColumns(self, args, funcs, cols=None):
         """
-        Returns a new DataFrame by adding columns or replacing existing columns after applying the function 
+        Returns a new DataFrame by adding or replacing existing columns after applying the functions (could be multidimentionnal)
         
         Parameters:
-        cols: list of existing Spark columns
-        func: function to apply on cols
-        new_cols: optional list of columns to create (default: None, using cols to store results)
+        args: list of arguments to consider into funcs, not necessarily the column list to add or replace, except if cols is not provided
+        funcs: functions to apply on args
+        cols: optional list of columns to create (default: None, using args as column names to store results)
         
         Returns:     
         DataFrame
         """
 
-        if not new_cols:
-            new_cols = cols
-        for col, new_col in zip(cols, new_cols):
-            # self = self.withColumn(new_col, func(F.col(col) if type(col) == str else col))
-            self = self.withColumn(new_col, func(col))
+        assert not isinstance(funcs, list) or len(args) == len(funcs), "args and funcs dimensions are incompatible"
+
+        if not cols:
+            assert (not set(map(lambda var: type(var), flattenIterable(args)))
+                    .difference([pyspark.sql.column.Column, str])), "as cols is not provided, args should be of type str or column"
+            cols = args
+        else:
+            assert np.array(args).shape == np.array(cols).shape, "args and cols should have the same sizes"
+        
+        ## withColumn method takes a string as colName argument
+        cols = _colsAsListOfStrings(cols)
+
+        ## Case where a unique function is applied successively to a list of arguments
+        if not isinstance(funcs, list):
+            for arg, col in zip(args, cols):
+                self = self.withColumn(col, funcs(arg))
+        ## Case where distinct functions are applied successively to a specific argument
+        elif np.array(args).ndim == 1:
+            for arg, col, func in zip(args, cols, funcs):
+                self = self.withColumn(col, func(arg))
+        ## Case where several distinct functions are applied successively to different lists of arguments, using a recursive call
+        else:
+            for arg, col, func in zip(args, cols, funcs):
+                self = self.withColumns(arg, func, col)
+
         return self
       
 
